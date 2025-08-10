@@ -1,0 +1,87 @@
+{
+  "name": "penalty-shootout-duel",
+  "version": "1.0.0",
+  "description": "A fully on-chain penalty shootout betting game for Somnia Testnet",
+  "main": "index.js",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "type-check": "tsc --noEmit",
+    "compile": "hardhat compile",
+    "test": "forge test -vvv",
+    "test:gas": "forge test --gas-report",
+    "test:coverage": "forge coverage",
+    "test:hardhat": "hardhat test",
+    "deploy:local": "hardhat run scripts/deploy.js --network localhost",
+    "deploy:somnia": "npx hardhat run scripts/deploy.js --network somnia",
+    "verify:somnia": "hardhat run scripts/verify.ts --network somnia",
+    "node": "hardhat node",
+    "clean": "hardhat clean && forge clean",
+    "format": "forge fmt",
+    "install:foundry": "curl -L https://foundry.paradigm.xyz | bash && foundryup",
+    "postinstall": "forge install",
+    "sync-frontend": "node scripts/sync-frontend.js"
+  },
+  "keywords": [
+    "web3",
+    "blockchain",
+    "gaming",
+    "betting",
+    "somnia",
+    "ethereum",
+    "solidity",
+    "nextjs",
+    "defi"
+  ],
+  "author": "Somnia Hackathon Team",
+  "license": "MIT",
+  "dependencies": {
+    "@headlessui/react": "^2.2.7",
+    "@openzeppelin/contracts": "^5.4.0",
+    "@rainbow-me/rainbowkit": "^2.0.0",
+    "@supabase/supabase-js": "^2.54.0",
+    "@tailwindcss/forms": "^0.5.10",
+    "@tailwindcss/typography": "^0.5.16",
+    "@tanstack/react-query": "^5.0.0",
+    "framer-motion": "^12.23.12",
+    "lucide-react": "^0.539.0",
+    "next": "^14.0.0",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "react-hot-toast": "^2.4.1",
+    "react-icons": "^5.5.0",
+    "viem": "^2.0.0",
+    "wagmi": "^2.0.0",
+    "zustand": "^4.4.0"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-foundry": "^1.1.0",
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.0.0",
+    "@types/react-dom": "^18.0.0",
+    "autoprefixer": "^10.4.0",
+    "dotenv": "^16.3.0",
+    "eslint": "^8.0.0",
+    "eslint-config-next": "^14.0.0",
+    "hardhat": "^2.19.0",
+    "hardhat-gas-reporter": "^1.0.9",
+    "postcss": "^8.4.0",
+    "solidity-coverage": "^0.8.5",
+    "tailwindcss": "^3.3.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/penalty-shootout-duel.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-username/penalty-shootout-duel/issues"
+  },
+  "homepage": "https://github.com/your-username/penalty-shootout-duel#readme"
+}
