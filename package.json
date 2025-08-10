@@ -21,7 +21,6 @@
     "clean": "hardhat clean && forge clean",
     "format": "forge fmt",
     "install:foundry": "curl -L https://foundry.paradigm.xyz | bash && foundryup",
-    "postinstall": "forge install",
     "sync-frontend": "node scripts/sync-frontend.js"
   },
   "keywords": [
