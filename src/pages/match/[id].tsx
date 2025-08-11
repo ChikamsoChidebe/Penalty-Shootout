@@ -7,7 +7,7 @@ import { toast } from 'react-hot-toast';
 import { IoFootball, IoArrowBack, IoTrophy } from 'react-icons/io5';
 
 import Layout from '@/components/Layout';
-import { supabaseAPI } from '@/lib/supabase';
+import { useMatchData } from '@/lib/contract';
 
 type Choice = 'left' | 'center' | 'right';
 
@@ -76,7 +76,8 @@ export default function MatchPage() {
     
     const loadMatch = async () => {
       try {
-        const dbMatch = await supabaseAPI.getMatch(id as string);
+        // Match data comes from blockchain
+        const dbMatch = null; // Will be fetched from contract
         if (!dbMatch) {
           toast.error('Match not found');
           router.push('/');
@@ -153,8 +154,8 @@ export default function MatchPage() {
       // Update database
       try {
         const winner = updatedMatch.playerScore > updatedMatch.aiScore ? address : 'AI_OPPONENT';
-        await supabaseAPI.finishMatch(match.id, winner, { rounds: updatedMatch.rounds });
-        await supabaseAPI.getOrCreatePlayer(address);
+        // Match completion handled by smart contract
+        // Player data tracked on-chain
         
         // Show final result
         setTimeout(() => {

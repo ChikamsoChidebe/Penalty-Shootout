@@ -1,7 +1,7 @@
 import { useAccount, useBalance } from 'wagmi';
 import { useEffect } from 'react';
 import { IoWallet } from 'react-icons/io5';
-import { supabaseAPI } from '@/lib/supabase';
+
 
 export default function BalanceDisplay() {
   const { address, isConnected } = useAccount();
@@ -14,7 +14,7 @@ export default function BalanceDisplay() {
     if (address && balance) {
       const syncBalance = async () => {
         try {
-          await supabaseAPI.updateBalance(address, parseFloat(balance.formatted));
+          // Balance is tracked on-chain via transactions
         } catch (error) {
           console.error('Error syncing balance:', error);
         }

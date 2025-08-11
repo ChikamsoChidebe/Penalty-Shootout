@@ -1,6 +1,7 @@
 import Head from 'next/head';
 import Layout from '@/components/Layout';
 import Leaderboard from '@/components/Leaderboard';
+import CommunityFeatures from '@/components/CommunityFeatures';
 
 export default function LeaderboardPage() {
   return (
@@ -21,8 +22,13 @@ export default function LeaderboardPage() {
             </p>
           </div>
 
-          <div className="max-w-4xl mx-auto">
-            <Leaderboard />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
+            <div className="lg:col-span-2">
+              <Leaderboard />
+            </div>
+            <div>
+              <CommunityFeatures />
+            </div>
           </div>
         </div>
       </Layout>
