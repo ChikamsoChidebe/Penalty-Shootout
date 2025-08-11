@@ -78,7 +78,6 @@ export default function DemoMatch() {
           
           <div className="text-center">
             <h1 className="text-2xl font-bold">🎬 Demo Match</h1>
-            <div className="text-sm text-purple-600">Perfect for Video Recording</div>
           </div>
           
           <div className="text-right">
