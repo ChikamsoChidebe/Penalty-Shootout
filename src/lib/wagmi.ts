@@ -1,6 +1,6 @@
 import { getDefaultConfig } from '@rainbow-me/rainbowkit';
 import { Chain } from 'viem';
-import { metaMask, injected } from 'wagmi/connectors';
+import { metaMask, injected, walletConnect, coinbaseWallet } from 'wagmi/connectors';
 
 // Localhost configuration
 export const localhost: Chain = {
@@ -52,19 +52,15 @@ export const somniaTestnet: Chain = {
 export const config = getDefaultConfig({
   appName: 'Penalty Shootout Duel',
   projectId: process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID || '0e2ef18355053573e228757c5dcc36b3',
-  chains: [somniaTestnet, localhost],
+  chains: [localhost, somniaTestnet], // Prioritize localhost for development
   ssr: true,
-  connectors: [
-    injected({ target: 'metaMask' }),
-    metaMask(),
-  ],
 });
 
 // Chain configuration
 export const SUPPORTED_CHAINS = [somniaTestnet, localhost];
 
-// Default chain
-export const DEFAULT_CHAIN = somniaTestnet;
+// Default chain - use localhost for development
+export const DEFAULT_CHAIN = process.env.NODE_ENV === 'development' ? localhost : somniaTestnet;
 
 // Network utilities
 export const isValidChain = (chainId: number): boolean => {

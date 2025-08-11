@@ -28,10 +28,13 @@ import BalanceDisplay from '@/components/BalanceDisplay';
 import CommunityFeatures from '@/components/CommunityFeatures';
 import AIInsights from '@/components/ai/AIInsights';
 import AIPracticeGame from '@/components/ai/AIPracticeGame';
+import NetworkDebug from '@/components/NetworkDebug';
+import ContractTest from '@/components/ContractTest';
 
 import { useAppStore, useShowTutorial } from '@/state/store';
 import { somniaTestnet } from '@/lib/wagmi';
-import { useMatchData, useMatchCounter } from '@/lib/contract';
+import { useContractContext } from '@/contexts/ContractContext';
+import { useDebouncedCallback } from '@/hooks/useDebounce';
 
 interface GameStats {
   total_matches: number;
@@ -61,36 +64,37 @@ export default function Home() {
     }
   }, [isConnected, isCorrectNetwork]);
 
-  const handleRefresh = useCallback(() => {
+  const handleRefresh = useDebouncedCallback(() => {
     setRefreshKey(prev => prev + 1);
     toast.success('Matches refreshed');
-  }, []);
+    // Force page reload to refresh contract data
+    window.location.reload();
+  }, 1000); // 1 second debounce
 
-  // Fetch real blockchain data
-  const { data: matchCounter } = useMatchCounter();
-  const { data: matchData } = useMatchData();
+  // Use centralized contract context
+  const { matches: allMatches, matchCounter, isLoading: matchesLoading } = useContractContext();
 
   useEffect(() => {
-    if (matchData && Array.isArray(matchData) && matchCounter) {
+    if (allMatches && matchCounter) {
       // Calculate real stats from blockchain data
       const totalMatches = Number(matchCounter);
-      const totalVolume = matchData.reduce((sum: number, match: any) => 
+      const totalVolume = allMatches.reduce((sum: number, match: any) => 
         sum + parseFloat(match?.stake || '0'), 0
       );
-      const activeMatches = matchData.filter((match: any) => match?.status === 'waiting').length;
+      const activeMatches = allMatches.filter((match: any) => match?.status === 'waiting').length;
       
       setGameStats({
         total_matches: totalMatches,
         total_volume: totalVolume,
-        active_players: activeMatches, // Active matches as proxy for active players
-        matches_today: Math.floor(totalMatches * 0.2), // Estimate
-        volume_today: totalVolume * 0.15 // Estimate
+        active_players: activeMatches,
+        matches_today: Math.floor(totalMatches * 0.2),
+        volume_today: totalVolume * 0.15
       });
       
       // Set real matches for AI analysis
-      setMatches(matchData.slice(0, 10)); // Latest 10 matches
+      setMatches(allMatches.slice(0, 10));
     }
-  }, [matchData, matchCounter]);
+  }, [allMatches, matchCounter]);
 
   return (
     <>
@@ -303,6 +307,14 @@ export default function Home() {
                       <span className="text-purple-700 dark:text-purple-300">Game Tutorial</span>
                       <IoBook className="text-purple-500 text-lg" />
                     </button>
+                    
+                    <a
+                      href="/demo-match"
+                      className="w-full flex items-center justify-between p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors"
+                    >
+                      <span className="text-purple-700 dark:text-purple-300">🎬 Demo Match</span>
+                      <IoFootball className="text-orange-500 text-lg" />
+                    </a>
                   </div>
                 </div>
               </div>
@@ -405,6 +417,10 @@ export default function Home() {
         {showTutorial && (
           <TutorialModal onClose={() => setShowTutorial(false)} />
         )}
+        
+        {/* Debug Components */}
+        <NetworkDebug />
+        <ContractTest />
       </Layout>
     </>
   );

@@ -1,25 +1,22 @@
-import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import { useAccount, useBalance, usePublicClient } from 'wagmi';
-import { formatEther, parseEther } from 'viem';
+import { useAccount, useBalance } from 'wagmi';
+import { parseEther, formatEther } from 'viem';
 import { toast } from 'react-hot-toast';
-import { useShootoutContract, useMatchCounter, usePlayerMatches } from '@/lib/contract';
-import { IoFootball, IoPeople, IoFlash, IoGameController } from 'react-icons/io5';
+import { useShootoutContract } from '@/lib/contract';
+import { useContractContext } from '@/contexts/ContractContext';
+import { IoFootball, IoRefresh } from 'react-icons/io5';
 import { TargetIcon, FlashIcon } from '@/components/icons';
 import ModernButton from '@/components/ModernButton';
-import { SHOOTOUT_ABI as shootoutABI } from '@/lib/abi';
-
-const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_SHOOTOUT_ADDRESS as `0x${string}`;
+import { useEffect, useState } from 'react';
 
 interface Match {
-  id: bigint;
-  creator: `0x${string}`;
-  opponent: `0x${string}`;
-  stake: bigint;
-  state: number;
-  createdAt: bigint;
-  joinDeadline: bigint;
-  winner: `0x${string}`;
+  id: string;
+  creator: string;
+  opponent: string;
+  stake: string;
+  status: string;
+  winner: string;
+  rounds: any[];
 }
 
 interface MatchListProps {
@@ -35,101 +32,41 @@ export default function MatchList({ type, playerAddress, refreshKey, onJoin, lim
   const { address } = useAccount();
   const { data: balance } = useBalance({ address });
   const { joinMatch, isPending } = useShootoutContract();
-  const { data: matchCounter } = useMatchCounter();
-  const { data: playerMatchIds } = usePlayerMatches(playerAddress);
-  const publicClient = usePublicClient();
+  const { matches: allMatches, isLoading, refetch } = useContractContext();
+  const [isRefreshing, setIsRefreshing] = useState(false);
   
-  const [matches, setMatches] = useState<Match[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  // Fetch matches from blockchain
+  // Auto-refresh when matches change
   useEffect(() => {
-    const fetchMatches = async () => {
-      if (!publicClient || !matchCounter) return;
-      
-      setLoading(true);
-      try {
-        const allMatches: Match[] = [];
-        
-        if (type === 'available') {
-          // Fetch all matches and filter for available ones
-          const counter = Number(matchCounter);
-          for (let i = 1; i <= counter; i++) {
-            try {
-              const match = await publicClient.readContract({
-                address: CONTRACT_ADDRESS,
-                abi: shootoutABI,
-                functionName: 'getMatch',
-                args: [BigInt(i)]
-              }) as any;
-              
-              // State 0 = Created (available to join)
-              if (match.state === 0 && match.creator !== address && match.creator !== '0x0000000000000000000000000000000000000000') {
-                allMatches.push({
-                  id: BigInt(i),
-                  creator: match.creator,
-                  opponent: match.opponent,
-                  stake: match.stake,
-                  state: match.state,
-                  createdAt: match.createdAt,
-                  joinDeadline: match.joinDeadline,
-                  winner: match.winner
-                });
-              }
-            } catch (error) {
-              // Skip invalid matches
-            }
-          }
-        } else if (type === 'player' && playerMatchIds) {
-          // Fetch player's matches
-          for (const matchId of playerMatchIds) {
-            try {
-              const match = await publicClient.readContract({
-                address: CONTRACT_ADDRESS,
-                abi: shootoutABI,
-                functionName: 'getMatch',
-                args: [matchId]
-              }) as any;
-              
-              allMatches.push({
-                id: matchId,
-                creator: match.creator,
-                opponent: match.opponent,
-                stake: match.stake,
-                state: match.state,
-                createdAt: match.createdAt,
-                joinDeadline: match.joinDeadline,
-                winner: match.winner
-              });
-            } catch (error) {
-              // Skip invalid matches
-            }
-          }
-        }
-        
-        const limitedMatches = limit ? allMatches.slice(0, limit) : allMatches;
-        setMatches(limitedMatches);
-      } catch (error) {
-        console.error('Error fetching matches:', error);
-        toast.error('Failed to load matches');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchMatches();
+    const interval = setInterval(() => {
+      console.log('🔄 Auto-refreshing matches...');
+      refetch();
+    }, 15000); // Refresh every 15 seconds
     
-    // Refresh every 10 seconds
-    const interval = setInterval(fetchMatches, 10000);
     return () => clearInterval(interval);
-  }, [type, playerAddress, address, refreshKey, matchCounter, playerMatchIds, publicClient]);
+  }, [refetch]);
+  
+  // Filter and sort matches based on type
+  const matches = type === 'available' 
+    ? allMatches.filter(match => match?.status === 'waiting' && match?.creator !== address)
+    : allMatches.filter(match => 
+        match?.creator?.toLowerCase() === playerAddress?.toLowerCase() ||
+        match?.opponent?.toLowerCase() === playerAddress?.toLowerCase()
+      );
+  
+  // Sort matches by ID (most recent first) since higher IDs = newer matches
+  const sortedMatches = matches?.sort((a, b) => parseInt(b.id) - parseInt(a.id));
+  
+  const displayMatches = limit ? sortedMatches?.slice(0, limit) : sortedMatches;
+  const loading = isLoading;
 
-  const handleJoinMatch = async (matchId: bigint, stake: bigint) => {
+  const handleJoinMatch = async (matchId: bigint, stakeAmount: string) => {
     if (!address) {
       toast.error('Please connect your wallet');
       return;
     }
 
+    const stake = parseEther(stakeAmount);
+    
     // Check balance
     if (balance && stake > balance.value) {
       toast.error('Insufficient balance');
@@ -137,12 +74,23 @@ export default function MatchList({ type, playerAddress, refreshKey, onJoin, lim
     }
 
     try {
-      await joinMatch(matchId, formatEther(stake));
+      console.log('🎯 Joining match:', { matchId: matchId.toString(), stakeAmount, stake: stake.toString() });
+      await joinMatch(matchId, stakeAmount);
       toast.success('Transaction submitted! Joining match...');
+      
+      // Force refresh data after successful join
+      setTimeout(async () => {
+        setIsRefreshing(true);
+        await refetch();
+        setIsRefreshing(false);
+        console.log('🔄 Data refreshed after joining match');
+        toast.success('Match updated! Check your matches.');
+      }, 3000); // Wait 3 seconds for transaction to be mined
+      
       onJoin?.();
     } catch (error: any) {
-      console.error('Error joining match:', error);
-      toast.error(error.message || 'Failed to join match');
+      console.error('❌ Error joining match:', error);
+      toast.error(error.shortMessage || error.message || 'Failed to join match');
     }
   };
 
@@ -150,27 +98,23 @@ export default function MatchList({ type, playerAddress, refreshKey, onJoin, lim
     router.push(`/match/${match.id}`);
   };
 
-  const getMatchStatusColor = (state: number) => {
-    switch (state) {
-      case 0: return 'status-created'; // Created
-      case 1: return 'status-joined';  // Joined
-      case 2: return 'status-committed'; // Committed
-      case 3: return 'status-reveal'; // RevealWindow
-      case 4: return 'status-settled'; // Settled
-      case 5: return 'status-cancelled'; // Cancelled
-      default: return 'status-created';
+  const getMatchStatusColor = (status: string) => {
+    switch (status) {
+      case 'waiting': return 'bg-green-100 text-green-800 dark:bg-green-800/30 dark:text-green-300';
+      case 'playing': return 'bg-blue-100 text-blue-800 dark:bg-blue-800/30 dark:text-blue-300';
+      case 'finished': return 'bg-gray-100 text-gray-800 dark:bg-gray-800/30 dark:text-gray-300';
+      case 'cancelled': return 'bg-red-100 text-red-800 dark:bg-red-800/30 dark:text-red-300';
+      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-800/30 dark:text-gray-300';
     }
   };
   
-  const getMatchStatusText = (state: number) => {
-    switch (state) {
-      case 0: return 'Available';
-      case 1: return 'Joined';
-      case 2: return 'Committed';
-      case 3: return 'Revealing';
-      case 4: return 'Finished';
-      case 5: return 'Cancelled';
-      default: return 'Unknown';
+  const getMatchStatusText = (status: string) => {
+    switch (status) {
+      case 'waiting': return 'Available';
+      case 'playing': return 'In Progress';
+      case 'finished': return 'Finished';
+      case 'cancelled': return 'Cancelled';
+      default: return status;
     }
   };
 
@@ -179,21 +123,21 @@ export default function MatchList({ type, playerAddress, refreshKey, onJoin, lim
     const isOpponent = match.opponent === address;
     const isParticipant = isCreator || isOpponent;
 
-    if (type === 'available' && match.state === 0) {
+    if (type === 'available' && match.status === 'waiting') {
       return (
         <ModernButton
           variant="success"
           size="sm"
           loading={isPending}
-          onClick={() => handleJoinMatch(match.id, match.stake)}
+          onClick={() => handleJoinMatch(BigInt(match.id), match.stake)}
           icon={<FlashIcon size={16} />}
         >
-          Join ({formatEther(match.stake)} ETH)
+          Join ({match.stake} ETH)
         </ModernButton>
       );
     }
 
-    if (type === 'player' && isParticipant && (match.state === 1 || match.state === 2 || match.state === 3)) {
+    if (type === 'player' && isParticipant && match.status === 'playing') {
       return (
         <ModernButton
           variant="primary"
@@ -206,7 +150,7 @@ export default function MatchList({ type, playerAddress, refreshKey, onJoin, lim
       );
     }
 
-    if (type === 'player' && isParticipant && match.state === 4) {
+    if (type === 'player' && isParticipant && match.status === 'finished') {
       const isWinner = match.winner === address;
       return (
         <ModernButton
@@ -241,7 +185,7 @@ export default function MatchList({ type, playerAddress, refreshKey, onJoin, lim
     );
   }
 
-  if (matches.length === 0) {
+  if (!displayMatches || displayMatches.length === 0) {
     return (
       <div className="text-center py-12">
         <div className="mb-6 flex justify-center">
@@ -262,21 +206,44 @@ export default function MatchList({ type, playerAddress, refreshKey, onJoin, lim
     );
   }
 
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    await refetch();
+    setIsRefreshing(false);
+    toast.success('Matches refreshed!');
+  };
+
   return (
     <div className="space-y-6">
-      {matches.map((match) => (
+      {/* Manual refresh button */}
+      <div className="flex justify-between items-center">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+          {type === 'available' ? 'Available Matches' : 'Your Matches'}
+        </h3>
+        <ModernButton
+          variant="secondary"
+          size="sm"
+          onClick={handleManualRefresh}
+          loading={isRefreshing}
+          icon={<IoRefresh size={16} />}
+        >
+          Refresh
+        </ModernButton>
+      </div>
+      
+      {displayMatches?.map((match) => (
         <div
-          key={match.id.toString()}
+          key={match.id}
           className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 hover:shadow-lg transition-shadow"
         >
           <div className="flex items-center justify-between">
             <div className="flex-1">
               <div className="flex items-center space-x-4 mb-4">
                 <span className="font-bold text-gray-900 dark:text-white text-lg">
-                  Match #{match.id.toString()}
+                  Match #{match.id}
                 </span>
-                <span className={`px-3 py-1 rounded-full text-xs font-bold ${getMatchStatusColor(match.state)}`}>
-                  {getMatchStatusText(match.state)}
+                <span className={`px-3 py-1 rounded-full text-xs font-bold ${getMatchStatusColor(match.status)}`}>
+                  {getMatchStatusText(match.status)}
                 </span>
               </div>
               
@@ -284,7 +251,7 @@ export default function MatchList({ type, playerAddress, refreshKey, onJoin, lim
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                   <span className="text-gray-600 dark:text-gray-400">Stake:</span>
-                  <span className="font-bold text-green-600 dark:text-green-400">{formatEther(match.stake)} ETH</span>
+                  <span className="font-bold text-green-600 dark:text-green-400">{match.stake} ETH</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
@@ -293,7 +260,7 @@ export default function MatchList({ type, playerAddress, refreshKey, onJoin, lim
                     {match.creator.slice(0, 6)}...{match.creator.slice(-4)}
                   </span>
                 </div>
-                {match.opponent !== '0x0000000000000000000000000000000000000000' && (
+                {match.opponent && match.opponent !== '0x0000000000000000000000000000000000000000' && (
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
                     <span className="text-gray-600 dark:text-gray-400">Opponent:</span>
@@ -306,7 +273,7 @@ export default function MatchList({ type, playerAddress, refreshKey, onJoin, lim
                   <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
                   <span className="text-gray-600 dark:text-gray-400">Created:</span>
                   <span className="text-gray-900 dark:text-white">
-                    {new Date(Number(match.createdAt) * 1000).toLocaleDateString()}
+                    Recently
                   </span>
                 </div>
               </div>
@@ -318,7 +285,7 @@ export default function MatchList({ type, playerAddress, refreshKey, onJoin, lim
           </div>
 
           {/* Match info for finished games */}
-          {match.state === 4 && match.winner !== '0x0000000000000000000000000000000000000000' && (
+          {match.status === 'finished' && match.winner && match.winner !== '0x0000000000000000000000000000000000000000' && (
             <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -331,7 +298,7 @@ export default function MatchList({ type, playerAddress, refreshKey, onJoin, lim
                 </div>
                 {match.winner === address && (
                   <span className="text-green-600 dark:text-green-400 font-bold text-lg">
-                    +{(parseFloat(formatEther(match.stake)) * 2 * 0.99).toFixed(4)} ETH
+                    +{(parseFloat(match.stake) * 2 * 0.99).toFixed(4)} ETH
                   </span>
                 )}
               </div>
