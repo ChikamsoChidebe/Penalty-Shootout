@@ -5,6 +5,12 @@ import { SHOOTOUT_ABI as shootoutABI } from './abi';
 
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_SHOOTOUT_ADDRESS as `0x${string}`;
 
+console.log('🔧 Contract Configuration:', {
+  address: CONTRACT_ADDRESS,
+  chainId: process.env.NEXT_PUBLIC_CHAIN_ID,
+  rpcUrl: process.env.NEXT_PUBLIC_RPC_URL
+});
+
 // Write contract operations
 export const useShootoutContract = () => {
   const { writeContract, data: hash, isPending, error } = useWriteContract();

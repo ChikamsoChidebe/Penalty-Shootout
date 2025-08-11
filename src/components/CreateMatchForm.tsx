@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAccount, useBalance } from 'wagmi';
 import { parseEther } from 'viem';
-import { toast } from '@/components/Toast';
+import { toast } from 'react-hot-toast';
 import { useShootoutContract } from '@/lib/contract';
 import { TargetIcon, CoinIcon } from '@/components/icons';
 import ModernButton from '@/components/ModernButton';
@@ -48,14 +48,24 @@ export default function CreateMatchForm({ onSuccess }: CreateMatchFormProps) {
     }
   };
 
+  const hasShownSuccessToast = useRef(false);
+
   // Handle transaction success
   useEffect(() => {
-    if (isSuccess) {
+    if (isSuccess && !hasShownSuccessToast.current) {
       toast.success('Match created successfully!');
+      hasShownSuccessToast.current = true;
       onSuccess?.();
       setStake('0.01');
     }
   }, [isSuccess, onSuccess]);
+
+  // Reset success toast flag when starting new transaction
+  useEffect(() => {
+    if (isPending) {
+      hasShownSuccessToast.current = false;
+    }
+  }, [isPending]);
 
   // Handle transaction error
   useEffect(() => {

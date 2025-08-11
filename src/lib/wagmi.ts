@@ -52,15 +52,15 @@ export const somniaTestnet: Chain = {
 export const config = getDefaultConfig({
   appName: 'Penalty Shootout Duel',
   projectId: process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID || '0e2ef18355053573e228757c5dcc36b3',
-  chains: [localhost, somniaTestnet], // Prioritize localhost for development
+  chains: [somniaTestnet, localhost], // Prioritize Somnia Testnet
   ssr: true,
 });
 
 // Chain configuration
 export const SUPPORTED_CHAINS = [somniaTestnet, localhost];
 
-// Default chain - use localhost for development
-export const DEFAULT_CHAIN = process.env.NODE_ENV === 'development' ? localhost : somniaTestnet;
+// Default chain - use Somnia Testnet
+export const DEFAULT_CHAIN = somniaTestnet;
 
 // Network utilities
 export const isValidChain = (chainId: number): boolean => {
