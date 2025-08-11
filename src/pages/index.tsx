@@ -81,12 +81,20 @@ export default function Home() {
       const totalVolume = allMatches.reduce((sum: number, match: any) => 
         sum + parseFloat(match?.stake || '0'), 0
       );
-      const activeMatches = allMatches.filter((match: any) => match?.status === 'waiting').length;
+      
+      // Count unique players (creators + opponents)
+      const uniquePlayers = new Set();
+      allMatches.forEach((match: any) => {
+        if (match?.creator) uniquePlayers.add(match.creator.toLowerCase());
+        if (match?.opponent && match.opponent !== '0x0000000000000000000000000000000000000000') {
+          uniquePlayers.add(match.opponent.toLowerCase());
+        }
+      });
       
       setGameStats({
         total_matches: totalMatches,
         total_volume: totalVolume,
-        active_players: activeMatches,
+        active_players: uniquePlayers.size,
         matches_today: Math.floor(totalMatches * 0.2),
         volume_today: totalVolume * 0.15
       });
