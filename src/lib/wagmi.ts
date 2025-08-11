@@ -54,6 +54,10 @@ export const config = getDefaultConfig({
   projectId: process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID || '0e2ef18355053573e228757c5dcc36b3',
   chains: [somniaTestnet, localhost],
   ssr: true,
+  connectors: [
+    injected({ target: 'metaMask' }),
+    metaMask(),
+  ],
 });
 
 // Chain configuration

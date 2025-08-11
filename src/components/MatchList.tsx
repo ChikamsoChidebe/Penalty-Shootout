@@ -1,44 +1,113 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import { useAccount } from 'wagmi';
+import { useAccount, useBalance, usePublicClient } from 'wagmi';
+import { formatEther, parseEther } from 'viem';
 import { toast } from 'react-hot-toast';
-import { supabaseAPI, Match } from '@/lib/supabase';
-import { IoGameController, IoList } from 'react-icons/io5';
+import { useShootoutContract, useMatchCounter, usePlayerMatches } from '@/lib/contract';
+import { IoFootball, IoPeople, IoFlash, IoGameController } from 'react-icons/io5';
+import { TargetIcon, FlashIcon } from '@/components/icons';
+import ModernButton from '@/components/ModernButton';
+import { SHOOTOUT_ABI as shootoutABI } from '@/lib/abi';
+
+const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_SHOOTOUT_ADDRESS as `0x${string}`;
+
+interface Match {
+  id: bigint;
+  creator: `0x${string}`;
+  opponent: `0x${string}`;
+  stake: bigint;
+  state: number;
+  createdAt: bigint;
+  joinDeadline: bigint;
+  winner: `0x${string}`;
+}
 
 interface MatchListProps {
   type: 'available' | 'player';
-  playerAddress?: string;
+  playerAddress?: `0x${string}`;
   refreshKey?: number;
   onJoin?: () => void;
   limit?: number;
 }
 
-// Using GameMatch interface from gameState
-
 export default function MatchList({ type, playerAddress, refreshKey, onJoin, limit }: MatchListProps) {
   const router = useRouter();
   const { address } = useAccount();
+  const { data: balance } = useBalance({ address });
+  const { joinMatch, isPending } = useShootoutContract();
+  const { data: matchCounter } = useMatchCounter();
+  const { data: playerMatchIds } = usePlayerMatches(playerAddress);
+  const publicClient = usePublicClient();
+  
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Fetch matches from Supabase backend
+  // Fetch matches from blockchain
   useEffect(() => {
     const fetchMatches = async () => {
+      if (!publicClient || !matchCounter) return;
+      
       setLoading(true);
       try {
-        let filteredMatches: Match[] = [];
+        const allMatches: Match[] = [];
         
         if (type === 'available') {
-          // Show available matches for joining
-          const availableMatches = await supabaseAPI.getAvailableMatches();
-          filteredMatches = availableMatches.filter(match => match.creator_address !== address);
-        } else if (type === 'player' && playerAddress) {
-          // Show player's matches
-          filteredMatches = await supabaseAPI.getPlayerMatches(playerAddress);
+          // Fetch all matches and filter for available ones
+          const counter = Number(matchCounter);
+          for (let i = 1; i <= counter; i++) {
+            try {
+              const match = await publicClient.readContract({
+                address: CONTRACT_ADDRESS,
+                abi: shootoutABI,
+                functionName: 'getMatch',
+                args: [BigInt(i)]
+              }) as any;
+              
+              // State 0 = Created (available to join)
+              if (match.state === 0 && match.creator !== address && match.creator !== '0x0000000000000000000000000000000000000000') {
+                allMatches.push({
+                  id: BigInt(i),
+                  creator: match.creator,
+                  opponent: match.opponent,
+                  stake: match.stake,
+                  state: match.state,
+                  createdAt: match.createdAt,
+                  joinDeadline: match.joinDeadline,
+                  winner: match.winner
+                });
+              }
+            } catch (error) {
+              // Skip invalid matches
+            }
+          }
+        } else if (type === 'player' && playerMatchIds) {
+          // Fetch player's matches
+          for (const matchId of playerMatchIds) {
+            try {
+              const match = await publicClient.readContract({
+                address: CONTRACT_ADDRESS,
+                abi: shootoutABI,
+                functionName: 'getMatch',
+                args: [matchId]
+              }) as any;
+              
+              allMatches.push({
+                id: matchId,
+                creator: match.creator,
+                opponent: match.opponent,
+                stake: match.stake,
+                state: match.state,
+                createdAt: match.createdAt,
+                joinDeadline: match.joinDeadline,
+                winner: match.winner
+              });
+            } catch (error) {
+              // Skip invalid matches
+            }
+          }
         }
-
-        // Apply limit if specified
-        const limitedMatches = limit ? filteredMatches.slice(0, limit) : filteredMatches;
+        
+        const limitedMatches = limit ? allMatches.slice(0, limit) : allMatches;
         setMatches(limitedMatches);
       } catch (error) {
         console.error('Error fetching matches:', error);
@@ -50,35 +119,27 @@ export default function MatchList({ type, playerAddress, refreshKey, onJoin, lim
 
     fetchMatches();
     
-    // Refresh every 5 seconds for real-time updates
-    const interval = setInterval(fetchMatches, 5000);
+    // Refresh every 10 seconds
+    const interval = setInterval(fetchMatches, 10000);
     return () => clearInterval(interval);
-  }, [type, playerAddress, address, refreshKey]);
+  }, [type, playerAddress, address, refreshKey, matchCounter, playerMatchIds, publicClient]);
 
-  const handleJoinMatch = async (matchId: string, stake: number) => {
+  const handleJoinMatch = async (matchId: bigint, stake: bigint) => {
     if (!address) {
       toast.error('Please connect your wallet');
       return;
     }
 
-    try {
-      // Ensure player exists in database
-      await supabaseAPI.getOrCreatePlayer(address);
-      
-      const match = await supabaseAPI.joinMatch(matchId, address);
-      if (!match) {
-        toast.error('Failed to join match');
-        return;
-      }
+    // Check balance
+    if (balance && stake > balance.value) {
+      toast.error('Insufficient balance');
+      return;
+    }
 
-      toast.success('Joined match successfully!');
+    try {
+      await joinMatch(matchId, formatEther(stake));
+      toast.success('Transaction submitted! Joining match...');
       onJoin?.();
-      
-      // Redirect to match page
-      setTimeout(() => {
-        router.push(`/match/${matchId}`);
-      }, 1000);
-      
     } catch (error: any) {
       console.error('Error joining match:', error);
       toast.error(error.message || 'Failed to join match');
@@ -86,59 +147,75 @@ export default function MatchList({ type, playerAddress, refreshKey, onJoin, lim
   };
 
   const handlePlayMatch = (match: Match) => {
-    // Navigate to match page using Next.js router (preserves wallet connection)
     router.push(`/match/${match.id}`);
   };
 
-  const getMatchStatusColor = (state: string) => {
+  const getMatchStatusColor = (state: number) => {
     switch (state) {
-      case 'waiting': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300';
-      case 'active': return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300';
-      case 'finished': return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
-      default: return 'bg-gray-100 text-gray-800';
+      case 0: return 'status-created'; // Created
+      case 1: return 'status-joined';  // Joined
+      case 2: return 'status-committed'; // Committed
+      case 3: return 'status-reveal'; // RevealWindow
+      case 4: return 'status-settled'; // Settled
+      case 5: return 'status-cancelled'; // Cancelled
+      default: return 'status-created';
+    }
+  };
+  
+  const getMatchStatusText = (state: number) => {
+    switch (state) {
+      case 0: return 'Available';
+      case 1: return 'Joined';
+      case 2: return 'Committed';
+      case 3: return 'Revealing';
+      case 4: return 'Finished';
+      case 5: return 'Cancelled';
+      default: return 'Unknown';
     }
   };
 
   const getActionButton = (match: Match) => {
-    const isCreator = match.creator_address === address;
-    const isOpponent = match.opponent_address === address;
+    const isCreator = match.creator === address;
+    const isOpponent = match.opponent === address;
     const isParticipant = isCreator || isOpponent;
 
-    if (type === 'available' && match.status === 'waiting') {
+    if (type === 'available' && match.state === 0) {
       return (
-        <button
-          onClick={() => handleJoinMatch(match.id, match.stake_amount)}
-          className="bg-primary-600 hover:bg-primary-700 text-white text-sm px-4 py-2 rounded-lg transition-colors"
+        <ModernButton
+          variant="success"
+          size="sm"
+          loading={isPending}
+          onClick={() => handleJoinMatch(match.id, match.stake)}
+          icon={<FlashIcon size={16} />}
         >
-          Join ({match.stake_amount} ETH)
-        </button>
+          Join ({formatEther(match.stake)} ETH)
+        </ModernButton>
       );
     }
 
-    if (type === 'player' && isParticipant && match.status === 'active') {
+    if (type === 'player' && isParticipant && (match.state === 1 || match.state === 2 || match.state === 3)) {
       return (
-        <button
+        <ModernButton
+          variant="primary"
+          size="sm"
           onClick={() => handlePlayMatch(match)}
-          className="bg-green-600 hover:bg-green-700 text-white text-sm px-4 py-2 rounded-lg transition-colors"
+          icon={<TargetIcon size={16} />}
         >
           Play Now
-        </button>
+        </ModernButton>
       );
     }
 
-    if (type === 'player' && isParticipant && match.status === 'finished') {
-      const isWinner = match.winner_address === address;
+    if (type === 'player' && isParticipant && match.state === 4) {
+      const isWinner = match.winner === address;
       return (
-        <button
+        <ModernButton
+          variant={isWinner ? "success" : "secondary"}
+          size="sm"
           onClick={() => handlePlayMatch(match)}
-          className={`text-sm px-4 py-2 rounded-lg transition-colors ${
-            isWinner 
-              ? 'bg-yellow-600 hover:bg-yellow-700 text-white' 
-              : 'bg-gray-600 hover:bg-gray-700 text-white'
-          }`}
         >
           {isWinner ? 'Claim Prize' : 'View Result'}
-        </button>
+        </ModernButton>
       );
     }
 
@@ -149,8 +226,15 @@ export default function MatchList({ type, playerAddress, refreshKey, onJoin, lim
     return (
       <div className="space-y-4">
         {[...Array(3)].map((_, i) => (
-          <div key={i} className="animate-pulse">
-            <div className="bg-gray-200 dark:bg-gray-700 rounded-lg h-20"></div>
+          <div key={i} className="bg-white dark:bg-gray-800 p-6 rounded-lg animate-pulse">
+            <div className="flex items-center justify-between">
+              <div className="flex-1 space-y-3">
+                <div className="h-4 bg-gray-200 dark:bg-gray-600 rounded w-1/4"></div>
+                <div className="h-3 bg-gray-200 dark:bg-gray-600 rounded w-1/2"></div>
+                <div className="h-3 bg-gray-200 dark:bg-gray-600 rounded w-1/3"></div>
+              </div>
+              <div className="h-10 w-24 bg-gray-200 dark:bg-gray-600 rounded-lg"></div>
+            </div>
           </div>
         ))}
       </div>
@@ -159,19 +243,18 @@ export default function MatchList({ type, playerAddress, refreshKey, onJoin, lim
 
   if (matches.length === 0) {
     return (
-      <div className="text-center py-8">
-        <div className="text-4xl mb-4 flex justify-center">
-          {type === 'available' ? 
-            <IoGameController className="text-gray-400" /> : 
-            <IoList className="text-gray-400" />
-          }
+      <div className="text-center py-12">
+        <div className="mb-6 flex justify-center">
+          <div className="p-4 bg-gray-100 dark:bg-gray-700 rounded-2xl">
+            <IoFootball size={48} className="text-gray-400" />
+          </div>
         </div>
-        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+        <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-3">
           {type === 'available' ? 'No Available Matches' : 'No Matches Found'}
         </h3>
-        <p className="text-gray-600 dark:text-gray-400">
+        <p className="text-gray-600 dark:text-gray-400 max-w-md mx-auto">
           {type === 'available' 
-            ? 'Be the first to create a match!' 
+            ? 'Waiting for matches to be created. Create one to get started!' 
             : 'Your matches will appear here once you create or join one.'
           }
         </p>
@@ -180,64 +263,75 @@ export default function MatchList({ type, playerAddress, refreshKey, onJoin, lim
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {matches.map((match) => (
         <div
-          key={match.id}
-          className="card p-4 hover:shadow-lg transition-shadow"
+          key={match.id.toString()}
+          className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 hover:shadow-lg transition-shadow"
         >
           <div className="flex items-center justify-between">
             <div className="flex-1">
-              <div className="flex items-center space-x-3 mb-2">
-                <span className="font-medium text-gray-900 dark:text-white">
-                  Match #{match.id}
+              <div className="flex items-center space-x-4 mb-4">
+                <span className="font-bold text-gray-900 dark:text-white text-lg">
+                  Match #{match.id.toString()}
                 </span>
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${getMatchStatusColor(match.status)}`}>
-                  {match.status.charAt(0).toUpperCase() + match.status.slice(1)}
+                <span className={`px-3 py-1 rounded-full text-xs font-bold ${getMatchStatusColor(match.state)}`}>
+                  {getMatchStatusText(match.state)}
                 </span>
               </div>
               
-              <div className="grid grid-cols-2 gap-4 text-sm text-gray-600 dark:text-gray-400">
-                <div>
-                  <span className="font-medium">Stake:</span> {match.stake_amount} ETH
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  <span className="text-gray-600 dark:text-gray-400">Stake:</span>
+                  <span className="font-bold text-green-600 dark:text-green-400">{formatEther(match.stake)} ETH</span>
                 </div>
-                <div>
-                  <span className="font-medium">Creator:</span>{' '}
-                  <span className="font-mono">
-                    {match.creator_address.slice(0, 6)}...{match.creator_address.slice(-4)}
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                  <span className="text-gray-600 dark:text-gray-400">Creator:</span>
+                  <span className="font-mono text-gray-900 dark:text-white">
+                    {match.creator.slice(0, 6)}...{match.creator.slice(-4)}
                   </span>
                 </div>
-                {match.opponent_address && (
-                  <div>
-                    <span className="font-medium">Opponent:</span>{' '}
-                    <span className="font-mono">
-                      {match.opponent_address.slice(0, 6)}...{match.opponent_address.slice(-4)}
+                {match.opponent !== '0x0000000000000000000000000000000000000000' && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                    <span className="text-gray-600 dark:text-gray-400">Opponent:</span>
+                    <span className="font-mono text-gray-900 dark:text-white">
+                      {match.opponent.slice(0, 6)}...{match.opponent.slice(-4)}
                     </span>
                   </div>
                 )}
-                <div>
-                  <span className="font-medium">Created:</span>{' '}
-                  {new Date(match.created_at).toLocaleDateString()}
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                  <span className="text-gray-600 dark:text-gray-400">Created:</span>
+                  <span className="text-gray-900 dark:text-white">
+                    {new Date(Number(match.createdAt) * 1000).toLocaleDateString()}
+                  </span>
                 </div>
               </div>
             </div>
 
-            <div className="ml-4">
+            <div className="ml-6">
               {getActionButton(match)}
             </div>
           </div>
 
           {/* Match info for finished games */}
-          {match.status === 'finished' && match.winner_address && (
-            <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-              <div className="text-sm">
-                <span className="font-medium">Winner:</span>{' '}
-                <span className={`font-mono ${match.winner_address === address ? 'text-green-600' : 'text-red-600'}`}>
-                  {match.winner_address === address ? 'You!' : `${match.winner_address.slice(0, 6)}...${match.winner_address.slice(-4)}`}
-                </span>
-                {match.winner_address === address && (
-                  <span className="ml-2 text-green-600 font-medium">
-                    +{(match.stake_amount * 2 * 0.99).toFixed(4)} ETH
+          {match.state === 4 && match.winner !== '0x0000000000000000000000000000000000000000' && (
+            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="text-gray-600 dark:text-gray-400">Winner:</span>
+                  <span className={`font-mono font-bold ${
+                    match.winner === address ? 'text-green-600 dark:text-green-400' : 'text-gray-900 dark:text-white'
+                  }`}>
+                    {match.winner === address ? 'You!' : `${match.winner.slice(0, 6)}...${match.winner.slice(-4)}`}
+                  </span>
+                </div>
+                {match.winner === address && (
+                  <span className="text-green-600 dark:text-green-400 font-bold text-lg">
+                    +{(parseFloat(formatEther(match.stake)) * 2 * 0.99).toFixed(4)} ETH
                   </span>
                 )}
               </div>
