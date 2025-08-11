@@ -511,24 +511,8 @@ export default function MatchPage() {
             <div className="text-xs text-blue-500 mt-1">
               Last update: {new Date(gameState.lastUpdate).toLocaleTimeString()}
             </div>
-            <div className="text-xs text-gray-500 mt-1">
-              Phase: {gameState.gamePhase} | Shooter: {gameState.shooterChoice || 'none'}
-            </div>
-            <div className="text-xs text-purple-500 mt-1">
-              Role: {isShooter ? 'SHOOTER' : 'KEEPER'} | Sync: {roleFixed ? 'Active' : 'Waiting'}
-            </div>
-            {gameState.gamePhase === 'test_phase' && (
-              <button 
-                onClick={() => {
-                  const gameKey = `match_${id}_game`;
-                  localStorage.removeItem(gameKey);
-                  window.location.reload();
-                }}
-                className="text-xs bg-red-500 text-white px-2 py-1 rounded mt-1"
-              >
-                Clear Corrupted Data
-              </button>
-            )}
+
+
           </div>
         </div>
 
@@ -691,8 +675,7 @@ export default function MatchPage() {
         </div>
       </div>
       
-      {/* Debug components - remove in production */}
-      <KeeperDebug matchId={id} isShooter={isShooter} gameState={gameState} />
+
     </Layout>
   );
 }

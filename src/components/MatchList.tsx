@@ -247,35 +247,34 @@ export default function MatchList({ type, playerAddress, refreshKey, onJoin, lim
                 </span>
               </div>
               
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  <span className="text-gray-600 dark:text-gray-400">Stake:</span>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                    <span className="text-gray-600 dark:text-gray-400">Stake:</span>
+                  </div>
                   <span className="font-bold text-green-600 dark:text-green-400">{match.stake} ETH</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                  <span className="text-gray-600 dark:text-gray-400">Creator:</span>
-                  <span className="font-mono text-gray-900 dark:text-white">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                    <span className="text-gray-600 dark:text-gray-400">Creator:</span>
+                  </div>
+                  <span className="font-mono text-gray-900 dark:text-white text-xs">
                     {match.creator.slice(0, 6)}...{match.creator.slice(-4)}
                   </span>
                 </div>
                 {match.opponent && match.opponent !== '0x0000000000000000000000000000000000000000' && (
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-                    <span className="text-gray-600 dark:text-gray-400">Opponent:</span>
-                    <span className="font-mono text-gray-900 dark:text-white">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                      <span className="text-gray-600 dark:text-gray-400">Opponent:</span>
+                    </div>
+                    <span className="font-mono text-gray-900 dark:text-white text-xs">
                       {match.opponent.slice(0, 6)}...{match.opponent.slice(-4)}
                     </span>
                   </div>
                 )}
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-                  <span className="text-gray-600 dark:text-gray-400">Created:</span>
-                  <span className="text-gray-900 dark:text-white">
-                    Recently
-                  </span>
-                </div>
               </div>
             </div>
 

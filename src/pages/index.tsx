@@ -418,9 +418,7 @@ export default function Home() {
           <TutorialModal onClose={() => setShowTutorial(false)} />
         )}
         
-        {/* Debug Components */}
-        <NetworkDebug />
-        <ContractTest />
+
       </Layout>
     </>
   );
